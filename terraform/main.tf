@@ -1,36 +1,23 @@
-
-terraform {
-  required_version = ">= 1.5.0, < 2.0.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
 provider "aws" {
   region = var.aws_region
 }
 
 locals {
-  project_name = "patertap"
+  project_name = var.project_name
   common_tags = {
     Project     = "PaterTap"
     Environment = var.environment
   }
 }
 
-# Private S3 bucket
-resource "aws_s3_bucket" "frontend" {
-  bucket_prefix = "${local.project_name}-frontend-"
+resource "aws_s3_bucket" "private_storage" {
+  bucket_prefix = "${local.project_name}-storage-"
   force_destroy = false
   tags          = local.common_tags
 }
 
-resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+resource "aws_s3_bucket_public_access_block" "private_storage" {
+  bucket = aws_s3_bucket.private_storage.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -38,7 +25,6 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
-# Database for housing listings
 resource "aws_dynamodb_table" "listings" {
   name         = "${local.project_name}-listings-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
@@ -49,15 +35,16 @@ resource "aws_dynamodb_table" "listings" {
     type = "S"
   }
 
-  point_in_time_recovery {
-    enabled = false
-  }
-
   tags = local.common_tags
 }
 
-# IAM role for the future Lambda function
-resource "aws_iam_role" "app_lambda" {
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/${local.project_name}-api-${var.environment}"
+  retention_in_days = 7
+  tags              = local.common_tags
+}
+
+resource "aws_iam_role" "lambda_exec" {
   name = "${local.project_name}-lambda-${var.environment}"
 
   assume_role_policy = jsonencode({
@@ -74,36 +61,43 @@ resource "aws_iam_role" "app_lambda" {
   tags = local.common_tags
 }
 
-# Permit Lambda to write logs
-resource "aws_iam_role_policy" "lambda_logs" {
-  name = "${local.project_name}-lambda-logs"
-  role = aws_iam_role.app_lambda.id
-
+resource "aws_iam_policy" "lambda_logs" {
+  name = "${local.project_name}-lambda-logs-${var.environment}"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
       Action = [
+        "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ]
-      Resource = "${aws_cloudwatch_log_group.app.arn}:*"
+      Resource = [
+        "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${local.project_name}-api-${var.environment}",
+        "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${local.project_name}-api-${var.environment}:*"
+      ]
     }]
   })
 }
 
-# Permit access only to the listings table
-resource "aws_iam_role_policy" "lambda_listings" {
-  name = "${local.project_name}-lambda-listings"
-  role = aws_iam_role.app_lambda.id
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.lambda_logs.arn
+}
+
+resource "aws_iam_policy" "dynamodb" {
+  name = "${local.project_name}-dynamodb-${var.environment}"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
       Action = [
+        "dynamodb:DescribeTable",
         "dynamodb:GetItem",
         "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
         "dynamodb:Scan",
         "dynamodb:Query"
       ]
@@ -112,8 +106,98 @@ resource "aws_iam_role_policy" "lambda_listings" {
   })
 }
 
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/aws/lambda/${local.project_name}-${var.environment}"
-  retention_in_days = 7
-  tags              = local.common_tags
+resource "aws_iam_role_policy_attachment" "dynamodb" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.dynamodb.arn
+}
+
+resource "aws_lambda_function" "api" {
+  function_name    = "${local.project_name}-api-${var.environment}"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "app.lambda_handler"
+  runtime          = var.lambda_runtime
+  memory_size      = 512
+  timeout          = 30
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  environment {
+    variables = {
+      PATERTAP_AWS_MODE      = "true"
+      PATERTAP_LISTINGS_TABLE = aws_dynamodb_table.listings.name
+      AWS_REGION             = var.aws_region
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_api_gateway_rest_api" "api" {
+  name        = "${local.project_name}-api-${var.environment}"
+  description = "PaterTap API gateway"
+}
+
+resource "aws_api_gateway_resource" "proxy" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "proxy_any" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "proxy_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.api.id
+  resource_id             = aws_api_gateway_resource.proxy.id
+  http_method            = aws_api_gateway_method.proxy_any.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.api.invoke_arn
+}
+
+resource "aws_api_gateway_method" "root_any" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_rest_api.api.root_resource_id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "root_integration" {
+  rest_api_id             = aws_api_gateway_rest_api.api.id
+  resource_id             = aws_api_gateway_rest_api.api.root_resource_id
+  http_method            = aws_api_gateway_method.root_any.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.api.invoke_arn
+}
+
+resource "aws_lambda_permission" "apigateway" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+resource "aws_api_gateway_stage" "default" {
+  deployment_id = aws_api_gateway_deployment.default.id
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  stage_name    = var.environment
+}
+
+resource "aws_api_gateway_deployment" "default" {
+  depends_on = [
+    aws_api_gateway_integration.proxy_integration,
+    aws_api_gateway_integration.root_integration,
+  ]
+
+  rest_api_id = aws_api_gateway_rest_api.api.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
