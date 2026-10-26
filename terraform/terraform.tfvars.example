@@ -1,0 +1,4 @@
+cloud_id = "replace-with-your-cloud-id"
+folder_id = "replace-with-your-folder-id"
+region = "confirm-region-for-your-account"
+environment = "demo"
