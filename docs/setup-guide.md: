@@ -1,0 +1,45 @@
+
+# Setup and Deployment Guide
+
+## Requirements
+
+- GitHub repository
+- Python 3.11 or a compatible version
+- Render account for hosting
+
+## Deployment on Render
+
+1. Push the project files to GitHub.
+2. Sign in to Render.
+3. Create a new Web Service.
+4. Connect the PaterTap GitHub repository.
+5. Choose the branch containing the project.
+6. Set the build command to:
+
+   `pip install -r requirements.txt`
+
+7. Set the start command to:
+
+   `gunicorn app:app`
+
+8. Deploy the service.
+9. Open the assigned service URL.
+10. Check the `/healthz` endpoint.
+
+## Optional AI configuration
+
+Add `GEMINI_API_KEY` to the Render environment variables. Do not place the key in source code or commit it to GitHub.
+
+The AI endpoint may return an error until a valid key and supported provider configuration are available.
+
+## Verification
+
+- Open the home page.
+- Check that sample listings load.
+- Try the roommate matching form.
+- Visit `/healthz`.
+- Review deployment logs if the service fails to start.
+
+## Limitations
+
+The current app uses SQLite demo data. Some hosting environments have ephemeral filesystems, so data persistence must be configured before production use.
