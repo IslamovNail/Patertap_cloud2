@@ -1,0 +1,38 @@
+
+# PaterTap Architecture
+
+## Overview
+
+PaterTap is a web application prototype for housing discovery and roommate matching.
+
+## Components
+
+1. **Web interface** — responsive HTML, CSS and JavaScript.
+2. **Flask application** — serves the interface and REST API endpoints.
+3. **SQLite** — stores demonstration listings and roommate profiles.
+4. **Gemini API** — optional external AI service, configured with a server-side environment variable.
+5. **Render** — intended hosting platform for the web application.
+6. **Terraform** — planned infrastructure-as-code extension.
+
+## Request flow
+
+Browser → Flask routes → SQLite demo data → JSON response → Browser UI.
+
+AI requests flow from the browser to Flask, then to the external AI provider. The API key must remain on the server.
+
+## Health monitoring
+
+The `/healthz` endpoint returns a JSON response indicating that the application process is running.
+
+## Security considerations
+
+- Store secrets in deployment environment variables.
+- Never commit API keys.
+- Validate user input.
+- Use HTTPS in deployment.
+- Demo listings and compatibility scores are illustrative.
+- Production deployment requires authentication, stronger database persistence, logging and additional security review.
+
+## Current limitations
+
+The prototype has no user registration, real bookings, verified listings or production-grade database. Terraform is not yet a complete infrastructure deployment.
