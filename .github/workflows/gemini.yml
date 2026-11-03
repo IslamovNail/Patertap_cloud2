@@ -1,0 +1,32 @@
+name: Gemini Code Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install google-genai
+
+      - name: Run Gemini Review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -c "
+          import os
+          from google import genai
+          client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
+          # Считываешь git diff и отправляешь на проверку в gemini-2.5-pro / flash
+          "
+          
