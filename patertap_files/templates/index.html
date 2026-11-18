@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PaterTap — жильё и соседи для студентов</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <h1>Pater<span>Tap</span></h1>
+    <nav id="tabs">
+      <button data-tab="listings" class="on">Жильё</button>
+      <button data-tab="mates">Соседи</button>
+      <button data-tab="ai">AI-помощник</button>
+      <button data-tab="stats">Статистика</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="tab-listings">
+    <div class="filters">
+      <input id="f-q" placeholder="Поиск по названию или описанию">
+      <input id="f-city" placeholder="Город (Almaty)">
+      <input id="f-district" placeholder="Район">
+      <input id="f-min" type="number" min="0" placeholder="Цена от">
+      <input id="f-max" type="number" min="0" placeholder="Цена до">
+      <select id="f-rooms">
+        <option value="">Комнат: любое</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+      </select>
+      <select id="f-sort">
+        <option value="price_asc">Сначала дешёвые</option>
+        <option value="price_desc">Сначала дорогие</option>
+        <option value="new">Сначала новые</option>
+      </select>
+      <label class="check"><input id="f-fav" type="checkbox"> Только избранное</label>
+    </div>
+
+    <details class="add">
+      <summary>+ Добавить объявление</summary>
+      <form id="add-form" class="form">
+        <input name="title" placeholder="Название" required>
+        <input name="city" placeholder="Город" required>
+        <input name="district" placeholder="Район" required>
+        <input name="price" type="number" min="1" placeholder="Цена в месяц, ₸" required>
+        <input name="rooms" type="number" min="1" max="10" placeholder="Комнат" value="1" required>
+        <textarea name="description" placeholder="Описание"></textarea>
+        <button class="btn" type="submit">Опубликовать</button>
+      </form>
+    </details>
+
+    <div id="list" class="grid"></div>
+    <p id="list-empty" class="muted" hidden>Ничего не найдено. Измени фильтры.</p>
+  </section>
+
+  <section id="tab-mates" hidden>
+    <h2>Подбор соседа</h2>
+    <form id="match-form" class="form row-form">
+      <label>Бюджет, ₸
+        <input name="budget" type="number" min="1" value="80000">
+      </label>
+      <label>Режим сна
+        <select name="sleep">
+          <option value="early">Рано ложусь</option>
+          <option value="late">Поздно ложусь</option>
+        </select>
+      </label>
+      <label>Порядок
+        <select name="cleanliness">
+          <option value="tidy">Аккуратный</option>
+          <option value="moderate">Средне</option>
+          <option value="messy">Не парюсь</option>
+        </select>
+      </label>
+      <label>Общение
+        <select name="social">
+          <option value="quiet">Тихий</option>
+          <option value="moderate">Умеренно</option>
+          <option value="social">Общительный</option>
+        </select>
+      </label>
+      <button class="btn" type="submit">Подобрать</button>
+    </form>
+    <div id="mates" class="grid"></div>
+
+    <details class="add">
+      <summary>+ Добавить свой профиль соседа</summary>
+      <form id="mate-form" class="form">
+        <input name="name" placeholder="Имя" required>
+        <input name="budget" type="number" min="1" placeholder="Бюджет, ₸" required>
+        <select name="sleep">
+          <option value="early">Рано ложусь</option>
+          <option value="late">Поздно ложусь</option>
+        </select>
+        <select name="cleanliness">
+          <option value="tidy">Аккуратный</option>
+          <option value="moderate">Средне</option>
+          <option value="messy">Не парюсь</option>
+        </select>
+        <select name="social">
+          <option value="quiet">Тихий</option>
+          <option value="moderate">Умеренно</option>
+          <option value="social">Общительный</option>
+        </select>
+        <textarea name="bio" placeholder="Коротко о себе"></textarea>
+        <button class="btn" type="submit">Сохранить профиль</button>
+      </form>
+    </details>
+  </section>
+
+  <section id="tab-ai" hidden>
+    <h2>AI-помощник по жилью</h2>
+    <p class="muted">Gemini видит объявления из базы и советует по ним.</p>
+    <div class="chips">
+      <button class="chip" data-q="Какое самое дешёвое жильё есть и что с ним не так?">Самое дешёвое</button>
+      <button class="chip" data-q="Подбери вариант до 80000 ₸ рядом с университетом">До 80 000 ₸</button>
+      <button class="chip" data-q="Что проверить перед тем как платить за аренду?">Как не нарваться на мошенников</button>
+    </div>
+    <div id="chat" class="chat"></div>
+    <form id="chat-form" class="chat-form">
+      <textarea id="chat-input" placeholder="Например: ищу комнату в Алматы до 80000" maxlength="1500"></textarea>
+      <button class="btn" id="chat-send" type="submit">Спросить</button>
+    </form>
+  </section>
+
+  <section id="tab-stats" hidden>
+    <h2>Статистика</h2>
+    <div id="stat-cards" class="stats"></div>
+    <h3>Средняя цена по районам</h3>
+    <div id="stat-bars" class="bars"></div>
+    <h3>Последние отклики</h3>
+    <div id="stat-inq" class="inq"></div>
+  </section>
+</main>
+
+<dialog id="ask-dlg">
+  <form id="ask-form" class="form">
+    <h3>Отклик: <span id="ask-title"></span></h3>
+    <input type="hidden" name="listing_id" id="ask-id">
+    <input name="name" placeholder="Твоё имя" required>
+    <input name="contact" placeholder="Telegram или телефон" required>
+    <textarea name="message" placeholder="Сообщение владельцу"></textarea>
+    <div class="actions">
+      <button class="btn" type="submit">Отправить</button>
+      <button class="btn ghost" type="button" id="ask-cancel">Отмена</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<footer class="wrap muted foot">
+  PaterTap — учебный прототип. Объявления и профили демонстрационные, не проверены. Перед оплатой проверяй владельца и все расходы.
+</footer>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
